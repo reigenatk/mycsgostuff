@@ -124,6 +124,7 @@
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <ShowIncludes>Yes</ShowIncludes>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>

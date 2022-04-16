@@ -51,9 +51,9 @@ int main() {
 	}
 	printf("Allocated page: 0x%p\n", buf);
 
-	// write into process memory the path to our DLL
+	// write into process memory that we just allocated, the path to our DLL
 	const char* path = "D:\\Coding\\C++\\CSGO Hacking\\mycsgostuff\\Debug\\CSGODLL.dll";
-	DWORD nWritten;
+	SIZE_T nWritten;
 	BOOL success = WriteProcessMemory(hProcess, buf, path, strlen(path), &nWritten);
 	if (!success || nWritten != strlen(path)) {
 		puts("WriteProcessMem fails");
@@ -62,8 +62,8 @@ int main() {
 	Sleep(1000);
 	printf("Process Memory Written\n");
 	// create remote thread
-	// call the LoadLibraryA routine with the address "buf" as the parameter
-	// which will just load + run our DLL
+	// call the LoadLibraryA routine to start execution at the memory we just allocated (which has the string name of our dll)
+	// this will just load + run our DLL
 	HANDLE h = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)LoadLibraryA, buf, 0, NULL);
 	if (!h) {
 		puts("CreateRemoteThread fail");

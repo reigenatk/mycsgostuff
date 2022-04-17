@@ -1,6 +1,8 @@
 // dllmain.cpp : Defines the entry point for the DLL application.
 #include "pch.h"
 #include "csgo.h"
+#include "C_CSPlayer.h"
+#include "NetVar.h"
 #include <stdio.h>
 #include <stdint.h>
 #include <math.h>
@@ -9,7 +11,7 @@
 
 HMODULE hmod;
 HMODULE hClient, hEngine;
-void* pLocalPlayer; // pointer to local player
+C_CSPlayer* pLocalPlayer; // pointer to local player
 cBaseEntityList* pEntityList; // pointer to entity list
 
 bool display_stats = false;
@@ -34,6 +36,25 @@ void pause()
     }
 }
 
+void* Find_Pattern(BYTE* BaseAddress, uintptr_t SearchLen, BYTE* pattern, BYTE* mask) {
+    BYTE* end = BaseAddress + SearchLen;
+    int pattern_length = strlen((char*) pattern);
+    for (BYTE* p = BaseAddress; p < end; p++) {
+        for (int i = 0; i < pattern_length; i++) {
+            // so only way this fails is if its just not equal and the mask isn't a '?'
+            if (mask[i] == '?' || (pattern[i] == p[i])) {
+                continue;
+            }
+            else {
+                goto bad;
+            }
+        }
+        // found a pattern
+        return p;
+    bad:
+        continue;
+    }
+}
 
 // we add the first argument ray here, originally only has start + end but its in a class so
 void Ray_Init(Ray_t* ray, Vector const& start, Vector const& end)
@@ -66,7 +87,7 @@ void Ray_Init(Ray_t* ray, Vector const& start, Vector const& end)
 
 
 // from mathlib/mathlib_base.cpp
-// change QAngle& to Vector* in function arguments
+// change & to Vector* in function arguments
 void AngleVectors(const Vector* angles, Vector* forward)
 {
 
@@ -167,29 +188,36 @@ bool __fastcall wrap_CreateMove(void* thisptr, DWORD edx, float flInputSampleTim
    
 
     // get world entity using offset
-    cBaseEntity* world_ent = pEntityList->m_EntyPtrArray[0].m_pEntity;
+    C_BaseEntity* world_ent = pEntityList->m_EntyPtrArray[0].m_pEntity;
     // void* world_ent  = *(void**)((uintptr_t)hClient + 0x4DA20CC);
 
     // we have direct access to the entity object that we hit actually through the m_pEnt member variable
     // let's filter out the world entity and say that if we hit a player we will trigger the kill
     // so basically if we mouse over a player's head then we will kill him
     bool numShots = 0;
-    if (trace.m_pEnt && trace.m_pEnt != (void*) world_ent && trace.hitgroup == HITGROUP_HEAD) {
+    // cmd->buttons = 0;
+    if (trace.m_pEnt) {
         // make the user shoot!
         // printf("shooting: %d %d\n", trace.hitbox, trace.hitgroup);
         // Beep(400, 50);
-        if (numShots < 10) {
-            cmd->buttons = 1;
-            numShots++;
+        IClientNetworkable* i = trace.m_pEnt->GetClientNetworkable();
+        char* targetClassName = i->GetClientClass()->m_pNetworkName;
+        printf("Aiming At: %s\n", targetClassName);
+        // check if a player object
+        if (strcmp(targetClassName, "CCSPlayer") == 0) {
+            // check if same team
+            if (trace.m_pEnt->m_iTeamNum != pLocalPlayer->m_iTeamNum) {
+                
+                if (trace.hitgroup == HITGROUP_HEAD) {
+                    cmd->buttons = 1;
+                }
+            }
         }
-        else {
-            cmd->buttons = 0;
-            numShots = 0;
-        }
+
     }
-    else {
-        // cmd->buttons &= ~1;
-    }
+
+    // test if the offset into player class is working 
+    // printf("Player Health Test: %d\n", pLocalPlayer->playerHealth);
 
     if (display_stats) {
         display_stats = false;
@@ -241,6 +269,43 @@ void hook_createMove() {
     
 }
 
+void NetVarHelpers(RecvTable* t, int level) {
+    if (!t) {
+        return;
+    }
+    for (int i = 0; i < t->m_nProps; i++) {
+        RecvProp* prop = &t->m_pProps[i];
+        if (prop->m_pVarName && !isdigit(*prop->m_pVarName)) {
+            // only print vars with non integer names
+            for (int j = 0; j < level; j++) printf(" ");
+            printf("%d, +%03x, %s, %s\n", i, prop->m_Offset, prop->m_pVarName, SendPropType_to_string(prop->m_RecvType));
+        }
+        if (prop->m_pDataTable && prop->m_RecvType == DPT_DataTable) {
+            // recurse
+            NetVarHelpers(prop->m_pDataTable, level + 1);
+        }
+        
+    }
+}
+
+
+// doesn't work when called, but when you put it in Main, it works. WTF? 
+//void NetVarStuff() {
+//    // Netvars
+//    ClientClass* clientClass = pLocalPlayer->GetClientNetworkable()->GetClientClass();
+//
+//    printf("Client class: %p\n", clientClass);
+//    printf("Class name: %s\n", clientClass->m_pNetworkName);
+//
+//    //// get the RecvTable 
+//    RecvTable* recvTable = clientClass->m_pRecvTable;
+//    printf("RecvTable: %p\n", recvTable);
+//    printf("RecvTable name: %s\n", recvTable->m_pNetTableName);
+//
+//    NetVarHelpers(recvTable, 0);
+//
+//}
+
 DWORD CALLBACK Main(LPVOID arg) {
     Beep(440, 100);
     AllocConsole();
@@ -276,14 +341,34 @@ DWORD CALLBACK Main(LPVOID arg) {
     game_cEngineTrace = (CEngineTrace*) Engine_CreateInterface("EngineTraceClient004", &returnValue);
     printf("CEngineTrace: %p\n", game_cEngineTrace);
 
+    // also got this offset from Cheat engine
+    pEntityList = (cBaseEntityList*)((uintptr_t)hClient + 0x4DD244C);
+
+    // alternatively you can just use the interface
+    interfaceEntityList = (IClientEntityList*)Client_CreateInterface("VClientEntityList003", &returnValue);
+
     // offset found using cheat engine. Dereference the pointer once though
-    pLocalPlayer = *(void**)((uintptr_t) hClient + 0x52239CC);
-    pEntityList = (cBaseEntityList*) ((uintptr_t)hClient + 0x4DD244C);
+    // pLocalPlayer = *(void**)((uintptr_t) hClient + 0x52239CC);
+
+    // alternatively use an interface
+    pLocalPlayer = (C_CSPlayer*) interfaceEntityList->GetClientEntity(1);
 
     printf("localPlayer: %p\n", pLocalPlayer);
 
     // do the hook
     hook_createMove();
+
+    // NetVarStuff();
+
+    //ClientClass* clientClass = pLocalPlayer->GetClientNetworkable()->GetClientClass();
+    //printf("Client class: %p\n", clientClass);
+    //printf("Class name: %s\n", clientClass->m_pNetworkName);
+    //RecvTable* recvTable = clientClass->m_pRecvTable;
+    //printf("RecvTable: %p\n", recvTable);
+    //printf("RecvTable name: %s\n", recvTable->m_pNetTableName);
+
+    //NetVarHelpers(recvTable, 0);
+    //Beep(200, 1000);
 
     //// enter infinite loop until we say to end
     pause();

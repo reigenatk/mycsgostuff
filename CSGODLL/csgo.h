@@ -1,6 +1,8 @@
 #pragma once
 
 #include "EntityList.h"
+#include "NetVar.h"
+#include "C_CSPlayer.h"
 #include <stdio.h>
 
 // from csgo wiki
@@ -141,7 +143,7 @@ typedef void* matrix3x4_t;
 
 typedef void* IHandleEntity;
 typedef uint8_t byte;
-typedef void* C_BaseEntity;
+
 
 
 
@@ -192,12 +194,13 @@ public:
     virtual TraceType_t	GetTraceType() const = 0;
 };
 
-extern void* pLocalPlayer; // pointer to local player
+extern C_CSPlayer* pLocalPlayer; // pointer to local player
+
 class MyITraceFilter : ITraceFilter {
     bool ShouldHitEntity(IHandleEntity* pEntity, int contentsMask) override {
         // printf("ShouldHitEntity called: pEntity is %p, contentsMask: %d\n", pEntity, contentsMask);
         // don't count collisions with our local player
-        if (pEntity == pLocalPlayer) {
+        if (pEntity == (IHandleEntity*) pLocalPlayer) {
             return false;
         }
         return true; // so it always hits said entity
@@ -321,4 +324,77 @@ struct CUserCmd {
     // Client only, tracks whether we've predicted this command at least once
     bool	hasbeenpredicted;
 
+};
+
+class C_BaseCombatWeapon;
+typedef void kbutton_t;
+typedef Vector QAngle;
+class cInput {
+public:	
+    virtual		void		Init_All(void) = 0;
+    virtual		void		Shutdown_All(void) = 0;
+    virtual		int			GetButtonBits(bool bResetState) = 0;
+    virtual		void		CreateMove(int sequence_number, float input_sample_frametime, bool active) = 0;
+    virtual		void		ExtraMouseSample(float frametime, bool active) = 0;
+    virtual		bool		WriteUsercmdDeltaToBuffer(int nSlot, void* buf, int from, int to, bool isnewcommand) = 0;
+    virtual		void		EncodeUserCmdToBuffer(int nSlot, void* buf, int slot) = 0;
+    virtual		void		DecodeUserCmdFromBuffer(int nSlot, void* buf, int slot) = 0;
+    virtual		CUserCmd* GetUserCmd(int nSlot, int sequence_number) = 0;
+    virtual		void		MakeWeaponSelection(C_BaseCombatWeapon* weapon) = 0;
+    virtual		float		KeyState(kbutton_t* key) = 0;
+    virtual		int			KeyEvent(int down, uint32_t keynum, const char* pszCurrentBinding) = 0;
+    virtual		kbutton_t* FindKey(const char* name) = 0;
+    virtual		void		ControllerCommands(void) = 0;
+    virtual		void		Joystick_Advanced(bool bSilent) = 0;
+    virtual		void		Joystick_SetSampleTime(float frametime) = 0;
+    virtual		float		Joystick_GetPitch(void) = 0;
+    virtual		float		Joystick_GetYaw(void) = 0;
+    virtual		void		Joystick_Querry(float& forward, float& side, float& pitch, float& yaw) = 0;
+    virtual		void		Joystick_ForceRecentering(int nStick, bool bSet = true) = 0;
+    virtual		void		IN_SetSampleTime(float frametime) = 0;
+    virtual		void		AccumulateMouse(int nSlot) = 0;
+    virtual		void		ActivateMouse(void) = 0;
+    virtual		void		DeactivateMouse(void) = 0;
+    virtual		void		ClearStates(void) = 0;
+    virtual		float		GetLookSpring(void) = 0;
+    virtual		void		GetFullscreenMousePos(int* mx, int* my, int* unclampedx = NULL, int* unclampedy = NULL) = 0;
+    virtual		void		SetFullscreenMousePos(int mx, int my) = 0;
+    virtual		void		ResetMouse(void) = 0;
+    virtual		float		GetLastForwardMove(void) = 0;
+    virtual		void		ClearInputButton(int bits) = 0;
+    virtual		void		CAM_Think(void) = 0;
+    virtual		int			CAM_IsThirdPerson(int nSlot = -1) = 0;
+    virtual		bool		CAM_IsThirdPersonOverview(int nSlot = -1) = 0;
+    virtual		void		CAM_GetCameraOffset(Vector& ofs) = 0;
+    virtual		void		CAM_ToThirdPerson(void) = 0;
+    virtual		void		CAM_ToFirstPerson(void) = 0;
+    virtual		void		CAM_ToThirdPersonShoulder(void) = 0;
+    virtual		void		CAM_ToThirdPersonOverview(void) = 0;
+    virtual		void		CAM_StartMouseMove(void) = 0;
+    virtual		void		CAM_EndMouseMove(void) = 0;
+    virtual		void		CAM_StartDistance(void) = 0;
+    virtual		void		CAM_EndDistance(void) = 0;
+    virtual		int			CAM_InterceptingMouse(void) = 0;
+    virtual		void		CAM_Command(int command) = 0;
+    virtual		void		CAM_ToOrthographic() = 0;
+    virtual		bool		CAM_IsOrthographic() const = 0;
+    virtual		void		CAM_OrthographicSize(float& w, float& h) const = 0;
+    virtual		void		AddIKGroundContactInfo(int entindex, float minheight, float maxheight) = 0;
+    virtual		void		LevelInit(void) = 0;
+    virtual		void		CAM_SetCameraThirdData(void* pCameraData, const QAngle& vecCameraOffset) = 0;
+    virtual		void		CAM_CameraThirdThink(void) = 0;
+    virtual		void		CheckPaused(CUserCmd* cmd) = 0;
+    virtual		void		CheckSplitScreenMimic(int nSlot, CUserCmd* cmd, CUserCmd* pPlayer0Command) = 0;
+    virtual void		Init_Camera(void) = 0;
+    virtual void		ApplyMouse(int nSlot, QAngle& viewangles, CUserCmd* cmd, float mouse_x, float mouse_y) = 0;
+    virtual void	JoyStickMove(float frametime, CUserCmd* cmd) = 0;
+    virtual void	SteamControllerMove(float frametime, CUserCmd* cmd) = 0;
+    virtual bool	ControllerModeActive(void) = 0;
+    virtual bool	JoyStickActive() = 0;
+    virtual void	JoyStickSampleAxes(float& forward, float& side, float& pitch, float& yaw, bool& bAbsoluteYaw, bool& bAbsolutePitch) = 0;
+    virtual void	JoyStickThirdPersonPlatformer(CUserCmd* cmd, float& forward, float& side, float& pitch, float& yaw) = 0;
+    virtual void	JoyStickTurn(CUserCmd* cmd, float& yaw, float& pitch, float frametime, bool bAbsoluteYaw, bool bAbsolutePitch) = 0;
+    virtual void	JoyStickForwardSideControl(float forward, float side, float& joyForwardMove, float& joySideMove) = 0;
+    virtual void	JoyStickApplyMovement(CUserCmd* cmd, float joyForwardMove, float joySideMove) = 0;
+    virtual void GetWindowCenter(int& x, int& y) = 0;
 };

@@ -27,6 +27,12 @@
     <ClInclude Include="csgo.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="NetVar.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C_CSPlayer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">

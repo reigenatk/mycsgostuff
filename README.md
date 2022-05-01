@@ -2,7 +2,7 @@
 
 This cheat is an **internal** cheat, meaning it gets injected into the running process (in this case, csgo.exe). 
 
-To use it, get the project, open up CSGO, and then run the solution. One window should appear, from the Visual Studio process.
+To use it, get the project, **open up CSGO first**, and then run the solution. One window should appear, from the Visual Studio process.
 But then you should get a second console window that spawns from the CSGO process itself. This is the window you should look at.
 
 Press F1 to toggle **Spray Control**, which removes spray entirely

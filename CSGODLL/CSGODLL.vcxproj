@@ -154,7 +154,6 @@
   <ItemGroup>
     <ClInclude Include="csgo.h" />
     <ClInclude Include="C_CSPlayer.h" />
-    <ClInclude Include="EntityList.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="NetVar.h" />
     <ClInclude Include="pch.h" />

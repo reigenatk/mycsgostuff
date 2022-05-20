@@ -26,6 +26,8 @@ Got more familiar with things like:
 - Hooking (CreateMove + ApplyMouse), still a noob at this tho
 - Common Windows API functions 
 
+##Video
+
 Here's a quick video of me demoing how to use it (Youtube Link)
 
 [![stuff](https://i9.ytimg.com/vi/9n91lrLUaB4/mqdefault.jpg?v=6287cf36&sqp=COydn5QG&rs=AOn4CLCMM7QEiSi5lmddQkuAeppvA0Yrqg)](https://youtu.be/9n91lrLUaB4)

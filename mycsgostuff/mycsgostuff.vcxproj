@@ -24,6 +24,7 @@
     <ProjectGuid>{cbdc59f8-9fee-46af-b3fc-f92e03f0da5c}</ProjectGuid>
     <RootNamespace>mycsgostuff</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>dllinjector</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">

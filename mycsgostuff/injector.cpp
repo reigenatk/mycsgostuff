@@ -5,7 +5,7 @@
 #include <string.h>
 #include <conio.h>
 #include <psapi.h>
-
+#include <map>
 #include <unordered_map>
 #include <string>
 #include <utility>
@@ -17,6 +17,66 @@ void __declspec(noreturn) fail() {
 	// the (void) means we ignore the return value (which is usually the character read)
 	(void)_getwche(); 
 	abort();
+}
+
+typedef struct patch{
+	char csgoBytes[5];
+	char correctBytes[5];
+	uintptr_t addr;
+	DWORD protectSettings;
+};
+
+struct pair_hash {
+	template <class T1, class T2>
+	std::size_t operator () (const std::pair<T1, T2>& p) const {
+		auto h1 = std::hash<T1>{}(p.first);
+		auto h2 = std::hash<T2>{}(p.second);
+
+		// Mainly for demonstration purposes, i.e. works but is overly simple
+		// In the real world, use sth. like boost.hash_combine
+		return h1 ^ h2;
+	}
+};
+
+std::unordered_map<std::pair<std::string, std::string>, patch, pair_hash> patch_map;
+
+// handle to CSGO
+HANDLE hProcess;
+
+void patchCSGO(const char* module_name, const char* function_name) {
+	// Load ntdll INTO CURRENT PROCESS. Get right bits and load into csgo process
+	// https://github.com/danielkrupinski/OneByteLdr
+	LPVOID func_addr = GetProcAddress(LoadLibraryA(module_name), function_name);
+	if (!func_addr) {
+		printf("Can't find function %s\n", function_name);
+		fail();
+	}
+	patch p;
+	p.addr = (uintptr_t) func_addr;
+	memcpy(p.correctBytes, func_addr, 5);
+	
+	
+
+	// save whatever was in csgo
+	ReadProcessMemory(hProcess, func_addr, p.csgoBytes, 5, NULL);
+	VirtualProtectEx(hProcess, func_addr, 5, PAGE_EXECUTE_READWRITE, &p.protectSettings);
+
+	// write correct bytes in and change protection back
+	WriteProcessMemory(hProcess, func_addr, p.correctBytes, 5, NULL);
+	
+	patch_map[std::make_pair(module_name, function_name)] = p;
+	FlushInstructionCache(hProcess, func_addr, 5);
+}
+
+void restoreCSGO(const char* module_name, const char* function_name) {
+	if (patch_map.find({ module_name, function_name }) == patch_map.end()) {
+		// doesn't exist
+		return;
+	}
+	auto p = patch_map[{module_name, function_name}];
+	WriteProcessMemory(hProcess, (LPVOID) p.addr, p.csgoBytes, 5, NULL);
+	VirtualProtectEx(hProcess, (LPVOID) p.addr, 5, p.protectSettings, NULL);
+	FlushInstructionCache(hProcess, (LPCVOID) p.addr, 5);
 }
 
 int main() {
@@ -31,19 +91,26 @@ int main() {
 	GetWindowThreadProcessId(hWnd, &pid);
 	printf("CSGO pid = %d\n", pid);
 
-	HANDLE hProcess;
+
 	hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, pid);
 	if (!hProcess || hProcess == INVALID_HANDLE_VALUE) {
 		fail();
 	}
+	printf("CSGO process handle at %p\n", hProcess);
 
+	printf("\nPatching functions...\n");
+	patchCSGO("ntdll", "LdrLoadDll");
+	patchCSGO("ntdll", "NtOpenFile");
+	patchCSGO("kernel32", "LoadLibraryExW");
+	patchCSGO("kernel32", "LoadLibraryA");
+	patchCSGO("kernel32", "LoadLibraryW");
+	patchCSGO("kernel32", "LoadLibraryExA");
+	patchCSGO("kernelbase", "LoadLibraryExA");
+	patchCSGO("kernelbase", "LoadLibraryExW");
+	patchCSGO("kernel32", "FreeLibrary");
+	patchCSGO("kernelbase", "FreeLibrary");
 
-	// The pointer that specifies a desired starting address for the region of pages that you want to allocate.
-	// If lpAddress is NULL, the function determines where to allocate the region.
-	// Allocate 4096 bytes
-	// Reserve + Commit that memory in one step
-	// put all privs on these pages
-	// If the function succeeds, the return value is the base address of the allocated region of pages. Else its null
+	// Reserves, commits, or changes the state of a region of memory within the virtual address space of a specified process. 
 	LPVOID buf = VirtualAllocEx(hProcess, NULL, 4096, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 	if (!buf) {
 		puts("VirtualAllocEx fails");
@@ -51,8 +118,9 @@ int main() {
 	}
 	printf("Allocated page: 0x%p\n", buf);
 
+
 	// write into process memory that we just allocated, the path to our DLL
-	const char* path = "D:\\Coding\\C++\\CSGO Hacking\\mycsgostuff\\Debug\\CSGODLL.dll";
+	const char* path = "D:\\Coding\\C++\\CSGO Hacking\\mycsgostuff\\Release\\CSGODLL.dll";
 	SIZE_T nWritten;
 	BOOL success = WriteProcessMemory(hProcess, buf, path, strlen(path), &nWritten);
 	if (!success || nWritten != strlen(path)) {
@@ -61,7 +129,7 @@ int main() {
 	}
 	Sleep(1000);
 	printf("Process Memory Written\n");
-	// create remote thread
+	// create remote thread in CSGO
 	// call the LoadLibraryA routine to start execution at the memory we just allocated (which has the string name of our dll)
 	// this will just load + run our DLL
 	HANDLE h = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)LoadLibraryA, buf, 0, NULL);
@@ -69,9 +137,22 @@ int main() {
 		puts("CreateRemoteThread fail");
 		fail();
 	}
-	printf("Everything seems okay?");
-	// free allocated thing
+	printf("Everything seems okay? Restoring Patches...");
+
+	restoreCSGO("ntdll", "LdrLoadDll");
+	restoreCSGO("ntdll", "NtOpenFile");
+	restoreCSGO("kernel32", "LoadLibraryExW");
+	restoreCSGO("kernel32", "LoadLibraryA");
+	restoreCSGO("kernel32", "LoadLibraryW");
+	restoreCSGO("kernel32", "LoadLibraryExA");
+	restoreCSGO("kernelbase", "LoadLibraryExA");
+	restoreCSGO("kernelbase", "LoadLibraryExW");
+	restoreCSGO("kernel32", "FreeLibrary");
+	restoreCSGO("kernelbase", "FreeLibrary");
+
+	// free allocated buffer
 	VirtualFreeEx(hProcess, buf, 4096, MEM_RELEASE);
+
 	(void)_getwche();
 	return 0;
 }

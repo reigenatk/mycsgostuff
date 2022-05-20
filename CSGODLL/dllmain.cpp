@@ -1,7 +1,6 @@
 // dllmain.cpp : Defines the entry point for the DLL application.
-#include "pch.h"
+#include <Windows.h>
 #include "csgo.h"
-#include "C_CSPlayer.h"
 #include <stdio.h>
 #include <stdint.h>
 #include <math.h>
@@ -10,11 +9,23 @@
 #include <iostream>
 #include <Psapi.h>
 
+
+// latest offsets from https://github.com/frk1/hazedumper/blob/master/csgo.hpp
+namespace offsets {
+    // wrt client
+    constexpr auto dwGlowObjectManager = 0x531C058;
+    constexpr auto dwEntityList = 0x4DD344C;
+
+    // wrt player
+    constexpr auto m_iGlowIndex = 0x10488;
+}
+
 HMODULE hmod;
 HMODULE hClient, hEngine;
 C_CSPlayer* pLocalPlayer; // pointer to local player
 cBaseEntityList* pEntityList; // pointer to entity list
 Vector* pCameraOffset;
+uintptr_t glowObjectManager;
 
 // global bools
 bool norecoil = false;
@@ -22,6 +33,7 @@ bool bhop = false;
 bool triggerbot = false;
 bool display_stats = false;
 bool aim_assist = false;
+bool glowies = false;
 
 // hook related stuff
 CreateMoveFn real_CreateMove;
@@ -32,66 +44,87 @@ ApplyMouseFn real_ApplyMouse;
 struct vtable_struct {
     void* RTTI;
     void* functions[1500]; // lets just arbitrarily pick 1000 for now
-};
+} vtable;
 
-vtable_struct cinput_vtable;
+vtable_struct fake_cinput_vtable;
 
-void** old_ccsplayer_vtable_address; // localplayer vtable
-void** old_ccsinput_vtable_address;
+
+void** old_ccsplayer_vtable_address = 0; // localplayer vtable
+void** old_ccsinput_vtable_address = 0; // same as gcinput
 
 // for using traceRay, obtained via interface
 CEngineTrace* game_cEngineTrace;
 
-void pause()
+// another interface export, need GetLocalPlayer() from this
+IVEngineClient* engineClient;
+
+// vtable 1
+void** cinput_vtable;
+cInput* gcinput;
+
+bool dll_exiting;
+
+DWORD waitForToggles(LPVOID lpThreadParameter)
 {
-    while (1)
+    while (!dll_exiting)
     {
         if (GetAsyncKeyState(VK_F1)) {
             // toggle displaying stats
             norecoil = !norecoil;
             if (norecoil == true) {
-                printf("norecoil turned on\n");
+                puts("norecoil turned on");
             }
             else {
-                printf("norecoil turned off\n");
+                puts("norecoil turned off");
             }
         }
         if (GetAsyncKeyState(VK_F2)) {
             // toggle displaying stats
             bhop = !bhop;
             if (bhop == true) {
-                printf("bhop turned on\n");
+                puts("bhop turned on");
             }
             else {
-                printf("bhop turned off\n");
+                puts("bhop turned off");
             }
         }
         if (GetAsyncKeyState(VK_F4)) {
             // toggle displaying stats
             triggerbot = !triggerbot;
             if (triggerbot == true) {
-                printf("triggerbot turned on\n");
+                puts("triggerbot turned on");
             }
             else {
-                printf("triggerbot turned off\n");
+                puts("triggerbot turned off");
             }
         }
         if (GetAsyncKeyState(VK_F6)) { // f5 is snipping tool
             // toggle displaying stats
             aim_assist = !aim_assist;
             if (aim_assist == true) {
-                printf("aim assist turned on\n");
+                puts("aim assist turned on");
             }
             else {
-                printf("aim assist turned off\n");
+                puts("aim assist turned off");
             }
         }
+        //if (GetAsyncKeyState(VK_F7)) {
+        //    // glow enemies
+        //    glowies = !glowies;
+        //    if (glowies) {
+        //        puts("enemy glow turned on");
+        //    }
+        //    else {
+        //        puts("enemy glow turned off");
+        //    }
+        //}
         if (GetAsyncKeyState(VK_F3))
         {
             break;
         }
         Sleep(100);
     }
+    return 0;
 }
 
 /*
@@ -212,6 +245,7 @@ ptrdiff_t get_netvar_offset(RecvTable* t, const char* prop_name, ptrdiff_t offse
     return -1;
 }
 
+// use a template because netvar variables come in 3 kinds of types- vector, int and float
 std::unordered_map<ClientClass*, std::unordered_map<std::string, ptrdiff_t>> offset_hashmap;
 template <typename T>
 T getNetVar(IClientNetworkable* ent, const char* prop_name) {
@@ -290,16 +324,20 @@ void __fastcall do_aim_assist(float& mouse_x) {
     Vector myPos = *(Vector*)((uintptr_t)pLocalPlayer + 0xA0);
     myPos += *pCameraOffset;
     float myYaw = clamp(*(float*)((uintptr_t)pLocalPlayer + 0x130));
+
     for (int i = 0; i < 64; i++) {
         IClientNetworkable* nent = interfaceEntityList->GetClientNetworkable(i);
         if (!interfaceEntityList->GetClientEntity(i) || !nent) {
+
             continue;
         }
         if (strcmp(nent->GetClientClass()->GetName(), "CCSPlayer")) {
+
             continue;
         }
         C_CSPlayer* other_player = (C_CSPlayer*)interfaceEntityList->GetClientEntity(i);
         if (other_player == pLocalPlayer || other_player->playerHealth == 0) {
+
             continue;
         }
 
@@ -327,7 +365,7 @@ void __fastcall do_aim_assist(float& mouse_x) {
         
         float deltaYaw = clamp(atan2f(diff.y, diff.x) * (180.0f / 3.14159265358f)); // returns value between -pi and pi radians
         float angle_difference = deltaYaw - myYaw;
-        printf("%d %f \n", i, angle_difference);
+        // printf("%d %f \n", i, angle_difference);
         if (abs(angle_difference) < abs(smallestYaw)) {
             smallestYaw = angle_difference; // dont store the absolute value version because we need the sign for later
             nearestEntIdx = i;
@@ -339,7 +377,7 @@ void __fastcall do_aim_assist(float& mouse_x) {
     float aimassist_fov = 15.0f;
     float aimassist_strength = 0.7f;
     if (nearestEntIdx != 65 && abs(smallestYaw) < aimassist_fov) {
-        printf("aim assisting Ent: %d, at angle: %f\n", nearestEntIdx, smallestYaw);
+        printf("\raim assisting Ent: %d, at angle: %f\n", nearestEntIdx, smallestYaw);
         //int correct_way = copysignf(1.f, smallestYaw);
         //int mouse_way = copysignf(1.f, -mouse_x);
         //float scale = aimassist_strength * abs(smallestYaw) / aimassist_fov;
@@ -373,15 +411,12 @@ bool __fastcall wrap_ApplyMouse(void* thisptr, DWORD edx, int nSlot, QAngle& vie
     
     // accumulate all the mouse changes between ticks, every time the server ticks this gets reset to 0
     accum_mouse_dx += mouse_x;
-
-
     if (norecoil) {
         do_norecoil(thisptr, nSlot, viewangles, cmd, mouse_x, mouse_y);
     }
 
     if (aim_assist) {
         do_aim_assist(mouse_x);
-
     }
 
     // printf("%f %f\n", mouse_x, mouse_y);
@@ -400,16 +435,16 @@ void do_bhop(void* thisptr, float flInputSampleTime, CUserCmd* cmd) {
     else {
         // strafe in air, in a direction depending on overall mouse input since last tick
 
-        printf("mousedx: %hu\n", accum_mouse_dx);
+        // printf("mousedx: %hu\n", accum_mouse_dx);
         if (accum_mouse_dx < 0) {
             // left
             cmd->sidemove = -450.0f;
-            printf("Moving Left\n");
+            printf("\rMoving Left\n");
             //*(int*)((uintptr_t)hClient + 0x3203988) = 1;
         }
         else if (accum_mouse_dx > 0) {
             cmd->sidemove = 450.0f;
-            printf("Moving Right\n");
+            printf("\rMoving Right\n");
             //*(int*)((uintptr_t)hClient + 0x3203994) = 1;
         }
 
@@ -491,9 +526,16 @@ void do_triggerbot(void* thisptr, float flInputSampleTime, CUserCmd* cmd) {
         printf("trace fraction: %f\n", trace.fraction);
     }
 
+    // figure out what weapon we're holding
+    CBaseHandle weapon_ehandle = getNetVar<CBaseHandle>(pLocalPlayer->GetClientNetworkable(), "m_hActiveWeapon");
+    int weapon_ent_index = weapon_ehandle.m_Index & ENT_ENTRY_MASK;
+    auto weapon_ent = (C_WeaponCSBase*) interfaceEntityList->GetClientEntity(weapon_ent_index);
+    if (!weapon_ent_index || !weapon_ent)
+    {
+        printf("bad weapon?\n");
+        return;
+    }
 
-    // get world entity using offset
-    C_BaseEntity* world_ent = pEntityList->m_EntyPtrArray[0].m_pEntity;
     // void* world_ent  = *(void**)((uintptr_t)hClient + 0x4DA20CC);
 
     // we have direct access to the entity object that we hit actually through the m_pEnt member variable
@@ -532,13 +574,34 @@ void do_triggerbot(void* thisptr, float flInputSampleTime, CUserCmd* cmd) {
     }
 }
 
+// doesnt work :(
+void do_glow() {
+    printf("glowObjectManager: %p\n", glowObjectManager);
+    for (auto i = 2; i < 64; i++) {
+        C_BaseEntity* player = (C_BaseEntity*)((uintptr_t)pEntityList + i * 0x10);
+        printf("player: %p\n", player);
+        if (player->m_iTeamNum == pLocalPlayer->m_iTeamNum) {
+            // don't light up our teammates
+            continue;
+        }
+        int32_t glowIndex = *(int32_t*)((uintptr_t) player + offsets::m_iGlowIndex);
+        printf("red: %p\n", glowObjectManager + (glowIndex * 0x38) + 0x8);
+        *(float*)(glowObjectManager + (glowIndex * 0x38) + 0x8) = 1.f; // r
+        *(float*)(glowObjectManager + (glowIndex * 0x38) + 0xC) = 0.f; // g
+        *(float*)(glowObjectManager + (glowIndex * 0x38) + 0x10) = 0.f; // b
+        *(float*)(glowObjectManager + (glowIndex * 0x38) + 0x14) = 1.f; // a
+
+        *(bool*)(glowObjectManager + (glowIndex * 0x38) + 0x27) = 1; // render occlude
+        *(bool*)(glowObjectManager + (glowIndex * 0x38) + 0x28) = 1; // render unocclude
+    }
+}
+
 // the function that we will replace when hooking. We know this function is 
 // called with _thiscall, so ecx will have *this pointer
 // this function will be called repeatedly by the game, and we can do whatever we want now.
 // it also seems to pass in a CUserCmd object, which if we investigate further, holds info about
 // the user view angles. So we can use this
 bool __fastcall wrap_CreateMove(void* thisptr, DWORD edx, float flInputSampleTime, CUserCmd* cmd) {
-
     if (triggerbot) {
         do_triggerbot(thisptr, flInputSampleTime, cmd);
     }
@@ -546,7 +609,13 @@ bool __fastcall wrap_CreateMove(void* thisptr, DWORD edx, float flInputSampleTim
     if (bhop) {
         do_bhop(thisptr, flInputSampleTime, cmd);
     }
+    //if (glowies) {
+    //    do_glow();
+    //}
     
+    // XD ok this doesnt work :/
+    // *(int*)(pLocalPlayer->playerHealth) = 100;
+
     // printf("Calling CreateMove %p %f %p\n", (void*) thisptr, flInputSampleTime, cmd);
     return real_CreateMove(thisptr, 0, flInputSampleTime, cmd);
     //return true;
@@ -555,23 +624,22 @@ bool __fastcall wrap_CreateMove(void* thisptr, DWORD edx, float flInputSampleTim
 
 
 void hook_createMove() {
+    printf("\n");
+    printf("Doing CreateMove hook\n");
     // save old vtable address
     old_ccsplayer_vtable_address = *(void***)pLocalPlayer;
-    printf("real vtable address: %p\n", old_ccsplayer_vtable_address);
+    printf("Real vtable address: %p\n", old_ccsplayer_vtable_address);
 
-    // Hook the vtable and add in our custom function!
-    vtable_struct vtable;
-
-    // IT goes (*localPlayer + 289)
+    // Copy the old vtable into our mock vtable. 
     memcpy(&vtable, (void*)((uintptr_t)old_ccsplayer_vtable_address - 4), sizeof(vtable));
 
-    for (int i = 0; i < 5; i++) {
-        printf("%p\n", vtable.functions[i]);
-    }
+    //for (int i = 0; i < 5; i++) {
+    //    printf("%p\n", vtable.functions[i]);
+    //}
 
     // next, get the real function address for createMove. We will need this later
     real_CreateMove = (CreateMoveFn)vtable.functions[289];
-    printf("real createMove address: %p\n", real_CreateMove);
+    printf("Real createMove address: %p\n", real_CreateMove);
     
     // load our version into the vtable
     vtable.functions[289] = wrap_CreateMove;
@@ -587,64 +655,110 @@ void hook_createMove() {
     
 }
 
-
-
-DWORD CALLBACK Main(LPVOID arg) {
-    Beep(440, 100);
-    AllocConsole();
-    // allow us to use that console
-    FILE* f;
-    // redirect your output stream to the newly created console.
-    (void) freopen_s(&f, "CONIN$", "r", stdin);
-    (void) freopen_s(&f, "CONOUT$", "w", stdout);
-    (void) freopen_s(&f, "CONOUT$", "w", stderr);
-
-    SetStdHandle(STD_INPUT_HANDLE, stdin);
-    SetStdHandle(STD_OUTPUT_HANDLE, stdout);
-
-    printf("Hello\n");
-    std::cout.clear();
-    // std::cout << "hi";
-    // MessageBox(NULL, (L"Pause to see console output."), (L"Pause Here"), MB_OK | MB_SYSTEMMODAL | MB_ICONEXCLAMATION);
-    
-    
+void resolveExportedThings() {
     // get a handle to the module called client(.dll)
     hClient = GetModuleHandleA("client");
     hEngine = GetModuleHandleA("engine");
     printf("hClient: %p\n", hClient);
     printf("hEngine: %p\n", hEngine);
 
+    if (!hClient || !hEngine) {
+        printf("Missing an interface from csgo\n");
+        return;
+    }
+
     // get the address of the CreateInterface function in the dll, and cast that to a function ptr
     // of type CreateInterfaceFn which we have defined above
-    
-    CreateInterfaceFn Client_CreateInterface = (CreateInterfaceFn) GetProcAddress(hClient, "CreateInterface");
-    CreateInterfaceFn Engine_CreateInterface = (CreateInterfaceFn) GetProcAddress(hEngine, "CreateInterface");
-    
+
+    CreateInterfaceFn Client_CreateInterface = (CreateInterfaceFn)GetProcAddress(hClient, "CreateInterface");
+    CreateInterfaceFn Engine_CreateInterface = (CreateInterfaceFn)GetProcAddress(hEngine, "CreateInterface");
+
     // get the interface. We can now call functions like TraceRay()
     int returnValue;
-    game_cEngineTrace = (CEngineTrace*) Engine_CreateInterface("EngineTraceClient004", &returnValue);
+    game_cEngineTrace = (CEngineTrace*)Engine_CreateInterface("EngineTraceClient004", &returnValue);
     printf("CEngineTrace: %p\n", game_cEngineTrace);
 
-    // also got this offset from Cheat engine
-    pEntityList = (cBaseEntityList*)((uintptr_t)hClient + 0x4DD244C);
+    // also got this offset from Cheat engine (or from hazedumper, they call it dwEntityList
+    pEntityList = (cBaseEntityList*)((uintptr_t)hClient + offsets::dwEntityList);
 
     // alternatively you can just use the interface
     interfaceEntityList = (IClientEntityList*)Client_CreateInterface("VClientEntityList003", &returnValue);
 
+    engineClient = (IVEngineClient*)Engine_CreateInterface("VEngineClient014", &returnValue);
+}
+
+void hook_ApplyMouse() {
+    printf("\nDoing ApplyMouse hook..\n");
+    IMAGE_DOS_HEADER* dos_hdr = (IMAGE_DOS_HEADER*)hClient;
+    IMAGE_NT_HEADERS* nt_hdr = (IMAGE_NT_HEADERS*)((uintptr_t)hClient + dos_hdr->e_lfanew);
+    DWORD imageSize = nt_hdr->OptionalHeader.SizeOfImage;
+    printf("Size of client.dll: %d bytes\n", imageSize);
+
+    // pattern scan for GCInput so we can install hooks into it
+    void* pat = Find_Pattern((BYTE*)hClient, imageSize, (BYTE*)"\xB9\xFF\xFF\xFF\xFF\x6A\xFF\xFF\x90\xFF\xFF\xFF\xFF\x85\xC0\x75\xFF\x8B\x06\x8B\xCE\xFF\x90\xFF\xFF\xFF\xFF",
+        (BYTE*)"x????x?xx????xxx?xxxxxx????");
+
+    printf("Pattern located at %p\n", pat);
+    gcinput = *(cInput**)((uintptr_t)pat + 1); // get address of gcinput, which points to the cInput vtable
+
+    printf("gcinput at %p\n", gcinput);
+
+    //printf("cinput_addr: %p\n", cinput_addr);
+    // cinput_vtable = *(void***)((uintptr_t)hClient + 0x5224A30);
+
+    cinput_vtable = *(void***)(gcinput);
+    printf("original cinput vtable at %p\n", cinput_vtable);
+    memcpy(&fake_cinput_vtable, (void*)((uintptr_t)cinput_vtable - 4), sizeof(fake_cinput_vtable));
+
+    real_ApplyMouse = (ApplyMouseFn)fake_cinput_vtable.functions[55];
+    printf("applymouse at %p\n", real_ApplyMouse);
+    fake_cinput_vtable.functions[55] = wrap_ApplyMouse;
+
+    // install new vtable
+    *(void***)gcinput = fake_cinput_vtable.functions;
+}
+
+void setupCheat() {
+   
+    resolveExportedThings();
+
+    hook_ApplyMouse();
+
     // offset found using cheat engine. Dereference the pointer once though
     // pLocalPlayer = *(void**)((uintptr_t) hClient + 0x52239CC);
 
-    // alternatively use an interface
-    pLocalPlayer = (C_CSPlayer*) interfaceEntityList->GetClientEntity(1);
+    C_CSPlayer* currentPlayer;
+    
+    while (!GetAsyncKeyState(VK_F3)) {
+        int localPlayerIdx = engineClient->GetLocalPlayer();
+        currentPlayer = (C_CSPlayer*)interfaceEntityList->GetClientEntity(localPlayerIdx); // returns 0 when not in game
+        // while we ein menu or if playing the game
+        while (!currentPlayer || currentPlayer == pLocalPlayer) {
+            // do nothing
+            Sleep(200);
+            if (!currentPlayer) {
+                puts("\rPlease join a game to begin...\n");
+            }
+            // printf("localPlayerIdx: %d, currentPlayer %p, pLocalPlayer = %p\n", localPlayerIdx, currentPlayer, pLocalPlayer);
+            localPlayerIdx = engineClient->GetLocalPlayer();
+            currentPlayer = (C_CSPlayer*)interfaceEntityList->GetClientEntity(localPlayerIdx);
+            if (GetAsyncKeyState(VK_F3)) {
+                goto unhook_and_exit;
+            }
+        }
 
-    // we will use camera offset here because otherwise the position value is the player's feet? I think
-    // this is always 0, 0, 64.06
-    pCameraOffset = (Vector*)((uintptr_t)pLocalPlayer + 0x108);
+        // otherwise we have just joined game or switched levels
+        pLocalPlayer = currentPlayer;
+        printf("localPlayer: %p\n", pLocalPlayer);
+        // we will use camera offset here because otherwise the position value is the player's feet? I think
+        // this is always 0, 0, 64.06
+        pCameraOffset = (Vector*)((uintptr_t)pLocalPlayer + 0x108);
+        glowObjectManager = ((uintptr_t) hClient + offsets::dwGlowObjectManager);
 
-    printf("localPlayer: %p\n", pLocalPlayer);
-
-    // do the hook
-    hook_createMove();
+        // do the hook
+        hook_createMove();
+        printf("F1: No recoil, F2: BHop, F3: Quit, F4: Trigger Bot, F6: Aim Assist\n");
+    }
 
     // NetVarStuff();
 
@@ -665,48 +779,49 @@ DWORD CALLBACK Main(LPVOID arg) {
 
     //ptrdiff_t p = get_netvar_offset(clientClass->m_pRecvTable, "m_aimPunchAngle");
     //printf("m_aimPunchAngle offset: %x\n", p);
+
+    //// enter infinite loop until we say to end. Also this lets us toggle buttons to activate cheats
+
+unhook_and_exit:
+    dll_exiting = true;
+    //// restore old vtables (createMove hook might not exist if we only sat in the menu)
+    if (old_ccsplayer_vtable_address && pLocalPlayer) {
+        *(void***)pLocalPlayer = old_ccsplayer_vtable_address;
+    }
+
+    *(void***)gcinput = cinput_vtable;
+
+    printf("vtables restored");
+}
+
+DWORD CALLBACK Main(LPVOID arg) {
+    dll_exiting = false;
+    Beep(440, 100);
+    DWORD threadId;
+    CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) waitForToggles, NULL, NULL, &threadId);
+    printf("Input handle thread started with ID %d\n", threadId);
+    AllocConsole();
+    // allow us to use that console
+    FILE* f;
+    // redirect your output stream to the newly created console.
+    (void) freopen_s(&f, "CONIN$", "r", stdin);
+    (void) freopen_s(&f, "CONOUT$", "w", stdout);
+    (void) freopen_s(&f, "CONOUT$", "w", stderr);
+
+    SetStdHandle(STD_INPUT_HANDLE, stdin);
+    SetStdHandle(STD_OUTPUT_HANDLE, stdout);
+
+    // printf("Hello\n");
+    // std::cout.clear();
+    // std::cout << "hi";
+    // MessageBox(NULL, (L"Pause to see console output."), (L"Pause Here"), MB_OK | MB_SYSTEMMODAL | MB_ICONEXCLAMATION);
     
+    setupCheat();
 
-    IMAGE_DOS_HEADER* dos_hdr = (IMAGE_DOS_HEADER*) hClient;
-    IMAGE_NT_HEADERS* nt_hdr = (IMAGE_NT_HEADERS*) ((uintptr_t) hClient + dos_hdr->e_lfanew);
-    DWORD imageSize = nt_hdr->OptionalHeader.SizeOfImage;
-    printf("Size of client.dll: %x\n", imageSize);
-
-    
-    void* pat = Find_Pattern((BYTE*)hClient, imageSize, (BYTE*)"\xB9\xFF\xFF\xFF\xFF\x6A\xFF\xFF\x90\xFF\xFF\xFF\xFF\x85\xC0\x75\xFF\x8B\x06\x8B\xCE\xFF\x90\xFF\xFF\xFF\xFF",
-        (BYTE*)"x????x?xx????xxx?xxxxxx????");
-
-    printf("Pattern located at %p\n", pat);
-    cInput* gcinput = *(cInput**)((uintptr_t)pat + 1); // get address of gcinput, which points to the cInput vtable
-    printf("gcinput at %p\n", gcinput);
-    
-    // void* cinput_addr = (void*)((uintptr_t)hClient + 0x5224A30);
-    //printf("cinput_addr: %p\n", cinput_addr);
-
-    void** cinput_vtable = *(void***)((uintptr_t)hClient + 0x5224A30);
-    printf("original cinput vtable at %p\n", cinput_vtable);
-    vtable_struct fake_cinput_vtable;
-    memcpy(&fake_cinput_vtable, (void*)((uintptr_t)cinput_vtable - 4), sizeof(fake_cinput_vtable));
-
-    real_ApplyMouse = (ApplyMouseFn)fake_cinput_vtable.functions[55];
-    printf("applymouse at %p\n", real_ApplyMouse);
-    fake_cinput_vtable.functions[55] = wrap_ApplyMouse;
-
-    // install new vtable
-    *(void***)gcinput = fake_cinput_vtable.functions;
-
-    
-
-    //// enter infinite loop until we say to end
-    pause();
-    //// restore old vtables
-    *(void***) pLocalPlayer = old_ccsplayer_vtable_address;
-    *(void***) gcinput = cinput_vtable;
-
-    printf("vtable restored");
 
     //// remove this DLL by calling FreeLibrary with handle to this DLL as the argument
     CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) FreeLibrary, hmod, 0, NULL);
+    
     
     return 0;
    

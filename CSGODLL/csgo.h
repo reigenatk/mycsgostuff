@@ -380,6 +380,86 @@ public:
 
 IClientEntityList* interfaceEntityList;
 
+//cs_weapon_parse.h
+enum CSWeaponID
+{
+	WEAPON_NONE = 0,
+
+	WEAPON_FIRST,
+
+	WEAPON_DEAGLE = WEAPON_FIRST,
+	WEAPON_ELITE,
+	WEAPON_FIVESEVEN,
+	WEAPON_GLOCK,
+	WEAPON_P228,
+	WEAPON_USP,
+
+	WEAPON_AK47,
+	WEAPON_AUG,
+	WEAPON_AWP,
+	WEAPON_FAMAS,
+	WEAPON_G3SG1,
+	WEAPON_GALIL,
+	WEAPON_GALILAR,
+	WEAPON_M249,
+	WEAPON_M3,
+	WEAPON_M4A1,
+	WEAPON_MAC10,
+	WEAPON_MP5NAVY,
+	WEAPON_P90,
+	WEAPON_SCOUT,
+	WEAPON_SG550,
+	WEAPON_SG552,
+	WEAPON_TMP,
+	WEAPON_UMP45,
+	WEAPON_XM1014,
+
+	WEAPON_BIZON,
+	WEAPON_MAG7,
+	WEAPON_NEGEV,
+	WEAPON_SAWEDOFF,
+	WEAPON_TEC9,
+	WEAPON_TASER,
+
+	WEAPON_HKP2000,
+	WEAPON_MP7,
+	WEAPON_MP9,
+	WEAPON_NOVA,
+	WEAPON_P250,
+	WEAPON_SCAR17,
+	WEAPON_SCAR20,
+	WEAPON_SG556,
+	WEAPON_SSG08,
+	WEAPON_LAST = WEAPON_SSG08,
+
+	ITEM_FIRST,
+	WEAPON_KNIFE_GG = ITEM_FIRST,
+	WEAPON_KNIFE,
+
+	WEAPON_FLASHBANG,
+	WEAPON_HEGRENADE,
+	WEAPON_SMOKEGRENADE,
+	WEAPON_MOLOTOV,
+	WEAPON_DECOY,
+	WEAPON_INCGRENADE,
+	WEAPON_TAGRENADE,
+	WEAPON_C4,
+	ITEM_MAX = WEAPON_C4,
+
+	EQUIPMENT_FIRST,
+	ITEM_KEVLAR = EQUIPMENT_FIRST,
+	ITEM_ASSAULTSUIT,
+	ITEM_HEAVYASSAULTSUIT,
+	ITEM_NVG,
+	ITEM_DEFUSER,
+	ITEM_CUTTERS,
+	EQUIPMENT_MAX,
+
+	WEAPON_HEALTHSHOT,
+
+	WEAPON_MAX = EQUIPMENT_MAX,		// number of weapons weapon index
+};
+
 
 // A ghetto entity list I derived using ReClass
 // Created with ReClass.NET 1.2 by KN4CK3R
@@ -427,7 +507,7 @@ public:
 class cBaseEntityList
 {
 public:
-	CEntInfo m_EntyPtrArray[64]; //0x0000
+	CEntInfo m_EntyPtrArray[64]; //0x0000 each of the 64 possible players
 	char pad_0400[2096]; //0x0400
 }; //Size: 0x0C30
 
@@ -756,117 +836,18 @@ public:
 	virtual void nullsub_21() = 0;
 	virtual void sub_10201410() = 0;
 	virtual void CreateMove(float flInputSampleTime, void* cmd) = 0;
-	virtual void sub_101ACA20() = 0;
-	virtual void nullsub_22() = 0;
-	virtual void sub_103FEA20() = 0;
-	virtual void sub_101939D0() = 0;
-	virtual void sub_103BCE60() = 0;
-	virtual void sub_101FCF80() = 0;
-	virtual void sub_103BDB70() = 0;
-	virtual void sub_103A63E0() = 0;
-	virtual void sub_103BBAC0() = 0;
-	virtual void sub_103BBB20() = 0;
-	virtual void sub_1019B680_39() = 0;
-	virtual void sub_101A1CF0() = 0;
-	virtual void sub_101A1CF0_40() = 0;
-	virtual void sub_101A1CF0_41() = 0;
-	virtual void sub_100B6650_42() = 0;
-	virtual void sub_10298890() = 0;
-	virtual void sub_10204780() = 0;
-	virtual void sub_10200C60() = 0;
-	virtual void sub_10200C70() = 0;
-	virtual void sub_10193F10_49() = 0;
-	virtual void sub_101A3650() = 0;
-	virtual void sub_101A36B0_50() = 0;
-	virtual void sub_103B38E0() = 0;
-	virtual void sub_103BBAB0() = 0;
-	virtual void sub_101FE670() = 0;
-	virtual void sub_100BCBF0_47() = 0;
-	virtual void sub_103A4710() = 0;
-	virtual void sub_10193F10_46() = 0;
-	virtual void sub_10200E10() = 0;
-	virtual void sub_10200EB0() = 0;
-	virtual void sub_101A9140() = 0;
-	virtual void sub_101A9220() = 0;
-	virtual void sub_101AA980() = 0;
-	virtual void sub_101AA8A0() = 0;
-	virtual void sub_101AA6B0() = 0;
-	virtual void sub_101E1DF0_52() = 0;
-	virtual void sub_101AAB30() = 0;
-	virtual void sub_101AA6E0() = 0;
-	virtual void sub_10204750() = 0;
-	virtual void sub_101AABE0() = 0;
-	virtual void sub_101AAB50() = 0;
-	virtual void sub_10200DD0() = 0;
-	virtual void sub_103BCB90() = 0;
-	virtual void sub_101AC9B0() = 0;
-	virtual void sub_10193F10_45() = 0;
-	virtual void sub_101AB950() = 0;
-	virtual void sub_101ADFA0() = 0;
-	virtual void nullsub_23() = 0;
-	virtual void sub_101A9750() = 0;
-	virtual void sub_101A97D0() = 0;
-	virtual void sub_101A9850() = 0;
-	virtual void sub_102016B0() = 0;
-	virtual void sub_102016E0() = 0;
-	virtual void sub_101FD4A0() = 0;
-	virtual void nullsub_24() = 0;
-	virtual void sub_10201610() = 0;
-	virtual void sub_103FD480() = 0;
-	virtual void sub_103B1390() = 0;
-	virtual void sub_103FD190() = 0;
-	virtual void sub_101A9F70() = 0;
-	virtual void sub_101AA400() = 0;
-	virtual void sub_103FF410() = 0;
-	virtual void sub_101AA540() = 0;
-	virtual void sub_103B1410() = 0;
-	virtual void nullsub_25() = 0;
-	virtual void sub_1019B680_53() = 0;
-	virtual void sub_102020F0() = 0;
-	virtual void sub_10202140() = 0;
-	virtual void sub_10202270() = 0;
-	virtual void sub_103A46A0() = 0;
-	virtual void sub_103B26F0() = 0;
-	virtual void sub_10204740() = 0;
-	virtual void sub_10204730() = 0;
-	virtual void sub_103BBAA0() = 0;
-	virtual void nullsub_26() = 0;
-	virtual void nullsub_27() = 0;
-	virtual void sub_101ABEC0() = 0;
-	virtual void sub_103BCF00() = 0;
-	virtual void sub_101FF660() = 0;
-	virtual void sub_103BEE60() = 0;
-	virtual void sub_103BF5D0() = 0;
-	virtual void sub_101FFCF0() = 0;
-	virtual void sub_103BDE30() = 0;
-	virtual void sub_101FD2C0() = 0;
-	virtual void sub_101FD2F0() = 0;
-	virtual void sub_10204720() = 0;
-	virtual void sub_10204710() = 0;
-	virtual void sub_10204700() = 0;
-	virtual void sub_103BDB50() = 0;
-	virtual void sub_103A4720() = 0;
-	virtual void sub_103A4660() = 0;
-	virtual void sub_103A4680() = 0;
-	virtual void nullsub_29() = 0;
-	virtual void sub_103A4640() = 0;
-	virtual void sub_103A4650() = 0;
-	virtual void sub_103A4670() = 0;
-	virtual void sub_103A4690() = 0;
-	virtual void sub_103A46B0() = 0;
-	virtual void sub_103B2120() = 0;
-	virtual void sub_103B2510() = 0;
-	virtual void sub_103B2660() = 0;
-	virtual void sub_103B2530() = 0;
-	virtual void sub_103A46C0() = 0;
-	virtual void sub_103B2230() = 0;
-	virtual void sub_103B1F40() = 0;
-	virtual void sub_103A7CD0() = 0;
-	virtual void sub_103A7D20() = 0;
+
 };
+// const.h
 
-extern C_CSPlayer* pLocalPlayer; // pointer to local player
+#define NUM_SERIAL_NUM_BITS		16 // (32 - NUM_ENT_ENTRY_BITS)
+#define NUM_SERIAL_NUM_SHIFT_BITS (32 - NUM_SERIAL_NUM_BITS)
+#define ENT_ENTRY_MASK			(( 1 << NUM_SERIAL_NUM_BITS) - 1)
 
+class CBaseHandle {
+public:
+	uint32_t m_Index;
+};
 
 // cmodel.h
 struct Ray_t {
@@ -981,7 +962,49 @@ public:
     virtual void	TraceRay(const Ray_t* ray, unsigned int fMask, ITraceFilter* pTraceFilter, trace_t* pTrace);
 };
 
+class IVEngineClient {
+public:
+	virtual int	pad() = 0;
 
+	// Get the lighting intensivty for a specified point
+	// If bClamp is specified, the resulting Vector is restricted to the 0.0 to 1.0 for each element
+	virtual Vector				GetLightForPoint(const Vector& pos, bool bClamp) = 0;
+
+	// Traces the line and reports the material impacted as well as the lighting information for the impact point
+	virtual void* TraceLineMaterialAndLighting(const Vector& start, const Vector& end,
+		Vector& diffuseLightColor, Vector& baseColor) = 0;
+
+	// Given an input text buffer data pointer, parses a single token into the variable token and returns the new
+	//  reading position
+	virtual const char* ParseFile(const char* data, char* token, int maxlen) = 0;
+	virtual bool				CopyLocalFile(const char* source, const char* destination) = 0;
+
+	// Gets the dimensions of the game window
+	virtual void				GetScreenSize(int& width, int& height) = 0;
+
+	// Forwards szCmdString to the server, sent reliably if bReliable is set
+	virtual void				ServerCmd(const char* szCmdString, bool bReliable = true) = 0;
+	// Inserts szCmdString into the command buffer as if it was typed by the client to his/her console.
+	// Note: Calls to this are checked against FCVAR_CLIENTCMD_CAN_EXECUTE (if that bit is not set, then this function can't change it).
+	//       Call ClientCmd_Unrestricted to have access to FCVAR_CLIENTCMD_CAN_EXECUTE vars.
+	virtual void				ClientCmd(const char* szCmdString) = 0;
+
+	// Fill in the player info structure for the specified player index (name, model, etc.)
+	virtual bool				GetPlayerInfo(int ent_num, void* pinfo) = 0;
+
+	// Retrieve the player entity number for a specified userID
+	virtual int					GetPlayerForUserID(int userID) = 0;
+
+	// Retrieves text message system information for the specified message by name
+	virtual void* TextMessageGet(const char* pName) = 0;
+
+	// Returns true if the console is visible
+	virtual bool				Con_IsVisible(void) = 0;
+
+	// Get the entity index of the local player
+	virtual int					GetLocalPlayer(void) = 0;
+
+};
 
 class C_BaseCombatWeapon;
 

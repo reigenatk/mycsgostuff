@@ -19,16 +19,16 @@ This was only possible due to the [leaked csgo source code](https://github.com/p
 
 Got more familiar with things like:
 
-- IDA PRO
+- IDA PRO 
 - Cheat Engine
 - x32dbg
 - Sig Scan
 - Hooking (CreateMove + ApplyMouse), still a noob at this tho
 - Common Windows API functions 
 
-##Video
+## Video!
 
-Here's a quick video of me demoing how to use it (Youtube Link)
+Here's a quick video of me demoing how to use it- click on the image, it's a link to Youtube
 
 [![stuff](https://i9.ytimg.com/vi/9n91lrLUaB4/mqdefault.jpg?v=6287cf36&sqp=COydn5QG&rs=AOn4CLCMM7QEiSi5lmddQkuAeppvA0Yrqg)](https://youtu.be/9n91lrLUaB4)
 
